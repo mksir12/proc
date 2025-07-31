@@ -6,19 +6,28 @@ export default async function handler(req, res) {
   }
 
   try {
-    const imageRes = await fetch(target);
+    const response = await fetch(target, {
+      headers: {
+        'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0',
+        'Referer': target, // Some hosts require a referer
+      }
+    });
 
-    if (!imageRes.ok) {
-      return res.status(500).send("Failed to fetch target image.");
+    if (!response.ok) {
+      return res.status(500).send("Failed to fetch the target URL.");
     }
 
-    const arrayBuffer = await imageRes.arrayBuffer();
+    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const arrayBuffer = await response.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    res.setHeader("Content-Type", imageRes.headers.get("content-type") || "image/jpeg");
+    res.setHeader("Content-Type", contentType);
     res.setHeader("Cache-Control", "no-cache");
-    res.send(buffer);
+    res.setHeader("Access-Control-Allow-Origin", "*"); // CORS for browsers
+    res.setHeader("X-Powered-By", "JerryCoder-Proxy");
+
+    return res.send(buffer);
   } catch (err) {
-    res.status(500).send("Proxy error: " + err.message);
+    return res.status(500).send("Proxy error: " + err.message);
   }
 }
