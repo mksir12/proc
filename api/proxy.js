@@ -2,23 +2,22 @@ export default async function handler(req, res) {
   const target = req.query.url;
 
   if (!target) {
-    res.status(400).send("Missing `url` query param.");
-    return;
+    return res.status(400).send("Missing `url` query param.");
   }
 
   try {
-    const response = await fetch(target);
+    const imageRes = await fetch(target);
 
-    if (!response.ok) {
-      res.status(500).send("Failed to fetch target image.");
-      return;
+    if (!imageRes.ok) {
+      return res.status(500).send("Failed to fetch target image.");
     }
 
-    // Stream image to client
-    res.setHeader("Content-Type", response.headers.get("content-type") || "image/jpeg");
-    res.setHeader("Cache-Control", "no-store");
+    const arrayBuffer = await imageRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-    response.body.pipe(res); // node.js readable stream
+    res.setHeader("Content-Type", imageRes.headers.get("content-type") || "image/jpeg");
+    res.setHeader("Cache-Control", "no-cache");
+    res.send(buffer);
   } catch (err) {
     res.status(500).send("Proxy error: " + err.message);
   }
