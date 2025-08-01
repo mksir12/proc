@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 
 export default async function handler(req, res) {
   const target = req.query.url;
+
   if (!target) {
     return res.status(400).send("Missing `url` query param.");
   }
@@ -21,7 +22,7 @@ export default async function handler(req, res) {
     const contentType = response.headers.get("content-type") || "";
     const baseType = contentType.split(";")[0].trim();
 
-    // ✅ Serve RAW for non-HTML content (like your image/banner/js/css loader)
+    // Serve RAW content for non-HTML (images, js, css, etc.)
     if (!baseType.includes("text/html")) {
       const buffer = Buffer.from(await response.arrayBuffer());
       res.setHeader("Content-Type", baseType || "application/octet-stream");
@@ -30,7 +31,7 @@ export default async function handler(req, res) {
       return res.status(200).send(buffer);
     }
 
-    // ✅ HTML: parse and rewrite URLs
+    // If HTML, rewrite it
     const html = await response.text();
     const $ = cheerio.load(html);
 
@@ -43,11 +44,7 @@ export default async function handler(req, res) {
       }
     };
 
-    // Remove CSP + SRI
-    $('meta[http-equiv="Content-Security-Policy"]').remove();
-    $('script[integrity], link[integrity]').removeAttr('integrity');
-
-    // Rewrite src, href, poster
+    // Rewrite src, href, and poster
     $('[src], [href], [poster]').each((_, el) => {
       const $el = $(el);
       const attr = $el.attr('src') ? 'src' : $el.attr('href') ? 'href' : 'poster';
@@ -62,7 +59,7 @@ export default async function handler(req, res) {
       }
     });
 
-    // Rewrite inline styles with url(...)
+    // Rewrite inline style attributes
     $('[style]').each((_, el) => {
       const style = $(el).attr('style');
       if (style) {
@@ -73,7 +70,7 @@ export default async function handler(req, res) {
       }
     });
 
-    // Rewrite <style> tags content
+    // Rewrite <style> blocks
     $('style').each((_, el) => {
       const css = $(el).html();
       if (css) {
@@ -84,7 +81,11 @@ export default async function handler(req, res) {
       }
     });
 
-    // Inject JS for overriding fetch and XHR
+    // Remove CSP and integrity for compatibility
+    $('meta[http-equiv="Content-Security-Policy"]').remove();
+    $('script[integrity], link[integrity]').removeAttr('integrity');
+
+    // ✅ Inject override JS for fetch and XHR
     $('head').prepend(`
       <script>
         (() => {
