@@ -2,74 +2,127 @@ import * as cheerio from 'cheerio';
 
 export default async function handler(req, res) {
   const target = req.query.url;
-  if (!target) {
-    res.status(400).send("Missing `url` query param.");
-    return;
-  }
+  if (!target) return res.status(400).send("Missing `url` query param.");
 
   try {
     const response = await fetch(target, {
       headers: {
         'User-Agent': req.headers['user-agent'] || 'Mozilla/5.0',
         'Referer': target,
-      }
+      },
     });
 
     if (!response.ok) {
-      res.status(500).send("Failed to fetch the target URL.");
-      return;
+      return res.status(500).send(`Failed to fetch ${target}: ${response.status}`);
     }
 
-    const contentType = response.headers.get('content-type') || 'application/octet-stream';
+    const contentTypeHeader = response.headers.get('content-type') || '';
+    const baseContentType = contentTypeHeader.split(';')[0].trim().toLowerCase();
 
-    if (contentType.includes('text/html')) {
-      const html = await response.text();
-      const $ = cheerio.load(html);
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
-      // Rewrite src attributes
-      $('[src]').each((_, el) => {
-        const src = $(el).attr('src');
-        if (src && !src.startsWith('http') && !src.startsWith('data:') && !src.startsWith('blob:')) {
-          try {
-            const absoluteUrl = new URL(src, target).toString();
-            $(el).attr('src', `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`);
-          } catch {
-            // skip invalid URLs
-          }
-        }
+    // ✅ Static assets (image, JS, CSS, icon, fonts, etc.)
+    if (!baseContentType.includes('text/html')) {
+      const safeContentType = /^[\x20-\x7E]+$/.test(baseContentType)
+        ? baseContentType
+        : 'application/octet-stream';
+
+      res.writeHead(200, {
+        'Content-Type': safeContentType,
+        'Cache-Control': 'no-cache',
+        'Access-Control-Allow-Origin': '*',
       });
-
-      // Rewrite href attributes
-      $('[href]').each((_, el) => {
-        const href = $(el).attr('href');
-        if (href && !href.startsWith('http') && !href.startsWith('#') && !href.startsWith('mailto:') && !href.startsWith('javascript:')) {
-          try {
-            const absoluteUrl = new URL(href, target).toString();
-            $(el).attr('href', `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`);
-          } catch {
-            // skip invalid URLs
-          }
-        }
-      });
-
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('X-Powered-By', 'JerryCoder-Proxy');
-      res.status(200).send($.html());
-
-    } else {
-      // Proxy other resources directly
-      const arrayBuffer = await response.arrayBuffer();
-      const buffer = Buffer.from(arrayBuffer);
-
-      res.setHeader("Content-Type", contentType);
-      res.setHeader("Cache-Control", "no-cache");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("X-Powered-By", "JerryCoder-Proxy");
-      res.status(200).send(buffer);
+      return res.end(buffer);
     }
+
+    // ✅ HTML rewriting
+    const html = buffer.toString('utf8');
+    const $ = cheerio.load(html);
+
+    const rewriteUrl = (url) => {
+      try {
+        const abs = new URL(url, target).toString();
+        return `/api/proxy?url=${encodeURIComponent(abs)}`;
+      } catch {
+        return url;
+      }
+    };
+
+    // Clean up security/meta
+    $('meta[http-equiv="Content-Security-Policy"]').remove();
+    $('script[integrity], link[integrity]').removeAttr('integrity');
+
+    // Rewrite all src/href/poster
+    $('[src], [href], [poster]').each((_, el) => {
+      const $el = $(el);
+      const attr = $el.attr('src') ? 'src' : $el.attr('href') ? 'href' : 'poster';
+      const val = $el.attr(attr);
+      if (
+        val &&
+        !val.startsWith('javascript:') &&
+        !val.startsWith('mailto:') &&
+        !val.startsWith('#')
+      ) {
+        $el.attr(attr, rewriteUrl(val));
+      }
+    });
+
+    // Rewrite inline style url(...)
+    $('[style]').each((_, el) => {
+      const style = $(el).attr('style');
+      if (style) {
+        const updated = style.replace(/url\((['"]?)([^'")]+)\1\)/g, (_, q, u) =>
+          `url(${q}${rewriteUrl(u)}${q})`
+        );
+        $(el).attr('style', updated);
+      }
+    });
+
+    // Rewrite CSS blocks <style>
+    $('style').each((_, el) => {
+      const css = $(el).html();
+      if (css) {
+        const updated = css.replace(/url\((['"]?)([^'")]+)\1\)/g, (_, q, u) =>
+          `url(${q}${rewriteUrl(u)}${q})`
+        );
+        $(el).html(updated);
+      }
+    });
+
+    // Inject override JS to patch fetch() and XMLHttpRequest
+    $('head').prepend(`
+      <script>
+        (() => {
+          const base = '${target}';
+          function toProxy(url) {
+            try {
+              return '/api/proxy?url=' + encodeURIComponent(new URL(url, base).toString());
+            } catch { return url; }
+          }
+
+          const _fetch = window.fetch;
+          window.fetch = function(input, init) {
+            if (typeof input === 'string') input = toProxy(input);
+            else if (input instanceof Request) input = new Request(toProxy(input.url), input);
+            return _fetch(input, init);
+          };
+
+          const _open = XMLHttpRequest.prototype.open;
+          XMLHttpRequest.prototype.open = function(method, url, ...args) {
+            return _open.call(this, method, toProxy(url), ...args);
+          };
+        })();
+      </script>
+    `);
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    return res.status(200).send($.html());
+
   } catch (err) {
-    res.status(500).send("Proxy error: " + err.message);
+    console.error("Proxy error:", err);
+    return res.status(500).send("Proxy error: " + err.message);
   }
 }
