@@ -1,9 +1,9 @@
 {
-  "name": "vercel-proxy",
+  "name": "node-proxy",
   "version": "1.0.0",
-  "main": "api/proxy.js",
   "type": "module",
   "dependencies": {
+    "express": "^4.18.2",
     "cheerio": "^1.0.0-rc.12",
     "node-fetch": "^3.3.1"
   }
