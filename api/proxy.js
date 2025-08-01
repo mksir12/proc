@@ -26,55 +26,70 @@ export default async function handler(req, res) {
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // Remove CSP headers or tags
+      // Remove any strict CSP that might block scripts
       $('meta[http-equiv="Content-Security-Policy"]').remove();
 
-      // Rewrite all src attributes (img, script, etc.)
+      // Rewriting src attributes (img, script, etc.)
       $('[src]').each((_, el) => {
         const src = $(el).attr('src');
         if (src) {
           try {
             const absoluteUrl = new URL(src, target).toString();
             $(el).attr('src', `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`);
-          } catch {
-            // skip invalid URLs
-          }
+          } catch {}
         }
       });
 
-      // Rewrite all href attributes (a, link, etc.)
+      // Rewriting href attributes (a, link, etc.)
       $('[href]').each((_, el) => {
         const href = $(el).attr('href');
         if (
           href &&
-          !href.startsWith('http') &&
-          !href.startsWith('#') &&
+          !href.startsWith('javascript:') &&
           !href.startsWith('mailto:') &&
-          !href.startsWith('javascript:')
+          !href.startsWith('#')
         ) {
           try {
             const absoluteUrl = new URL(href, target).toString();
             $(el).attr('href', `/api/proxy?url=${encodeURIComponent(absoluteUrl)}`);
-          } catch {
-            // skip invalid URLs
-          }
-        } else if (href && href.startsWith('http')) {
-          $(el).attr('href', `/api/proxy?url=${encodeURIComponent(href)}`);
+          } catch {}
         }
       });
 
-      // Inject script to override fetch
+      // Inject script to override fetch() and XMLHttpRequest
       $('head').prepend(`
         <script>
-          const originalFetch = window.fetch;
-          window.fetch = function(resource, init) {
-            try {
-              if (typeof resource === 'string' && !resource.startsWith('http') && !resource.startsWith('/api/proxy')) {
-                resource = '/api/proxy?url=' + encodeURIComponent(new URL(resource, location.href));
+          (function() {
+            const base = '${target}';
+
+            function toProxyUrl(original) {
+              try {
+                const abs = new URL(original, base);
+                return '/api/proxy?url=' + encodeURIComponent(abs.toString());
+              } catch (e) {
+                return original;
               }
-            } catch (e) {}
-            return originalFetch(resource, init);
-          };
+            }
+
+            const originalFetch = window.fetch;
+            window.fetch = function(resource, init) {
+              if (typeof resource === 'string') {
+                resource = toProxyUrl(resource);
+              } else if (resource instanceof Request) {
+                const newUrl = toProxyUrl(resource.url);
+                resource = new Request(newUrl, resource);
+              }
+              return originalFetch(resource, init);
+            };
+
+            const originalXhrOpen = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...args) {
+              try {
+                url = toProxyUrl(url);
+              } catch {}
+              return originalXhrOpen.call(this, method, url, ...args);
+            };
+          })();
         </script>
       `);
 
@@ -85,7 +100,7 @@ export default async function handler(req, res) {
       res.status(200).send($.html());
 
     } else {
-      // Proxy non-HTML resources (scripts, images, CSS, etc.)
+      // Proxy static resources (JS, CSS, JSON, etc.)
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
