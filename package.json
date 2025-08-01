@@ -1,8 +1,8 @@
 {
-  "name": "node-proxy",
+  "name": "universal-proxy",
   "version": "1.0.0",
-  "type": "module",
   "main": "api/proxy.js",
+  "type": "module",
   "dependencies": {
     "cheerio": "^1.0.0-rc.12"
   }
