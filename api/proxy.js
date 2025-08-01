@@ -1,12 +1,9 @@
-import express from 'express';
-import fetch from 'node-fetch';
+// api/proxy.js
 import * as cheerio from 'cheerio';
 
-const app = express();
-const port = process.env.PORT || 3000;
-
-app.get('/proxy', async (req, res) => {
+export default async function handler(req, res) {
   const target = req.query.url;
+
   if (!target) {
     return res.status(400).send('Missing `url` query parameter.');
   }
@@ -39,7 +36,7 @@ app.get('/proxy', async (req, res) => {
         if (val) {
           try {
             const absolute = new URL(val, target).toString();
-            $(el).attr(attr, `/proxy?url=${encodeURIComponent(absolute)}`);
+            $(el).attr(attr, `/api/proxy?url=${encodeURIComponent(absolute)}`);
           } catch {}
         }
       };
@@ -51,7 +48,7 @@ app.get('/proxy', async (req, res) => {
           const [url, desc] = pair.trim().split(/\s+/);
           try {
             const abs = new URL(url, target).toString();
-            return `/proxy?url=${encodeURIComponent(abs)}${desc ? ' ' + desc : ''}`;
+            return `/api/proxy?url=${encodeURIComponent(abs)}${desc ? ' ' + desc : ''}`;
           } catch {
             return pair;
           }
@@ -70,7 +67,7 @@ app.get('/proxy', async (req, res) => {
           (_, q, url) => {
             try {
               const abs = new URL(url, target).toString();
-              return `url(${q}/proxy?url=${encodeURIComponent(abs)}${q})`;
+              return `url(${q}/api/proxy?url=${encodeURIComponent(abs)}${q})`;
             } catch {
               return '';
             }
@@ -83,7 +80,7 @@ app.get('/proxy', async (req, res) => {
           (_, q, url) => {
             try {
               const abs = new URL(url, target).toString();
-              return `url(${q}/proxy?url=${encodeURIComponent(abs)}${q})`;
+              return `url(${q}/api/proxy?url=${encodeURIComponent(abs)}${q})`;
             } catch {
               return '';
             }
@@ -93,7 +90,7 @@ app.get('/proxy', async (req, res) => {
 
       $('head').prepend(`<script>(function(){
         const base='${target}';
-        const toProxy=u=>{try{return'/proxy?url='+encodeURIComponent(new URL(u,base).toString())}catch{return u}};
+        const toProxy=u=>{try{return'/api/proxy?url='+encodeURIComponent(new URL(u,base).toString())}catch{return u}};
         const f=window.fetch;
         window.fetch=(r,i)=>{if(typeof r==='string')r=toProxy(r);else if(r instanceof Request)r=new Request(toProxy(r.url),r);return f(r,i)};
         const o=XMLHttpRequest.prototype.open;
@@ -120,6 +117,4 @@ app.get('/proxy', async (req, res) => {
     console.error('Proxy error:', err);
     res.status(500).send('Proxy error: ' + err.message);
   }
-});
-
-app.listen(port, () => console.log(`Proxy server running at http://localhost:${port}`));
+}
