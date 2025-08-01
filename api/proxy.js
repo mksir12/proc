@@ -2,7 +2,9 @@ import * as cheerio from 'cheerio';
 
 export default async function handler(req, res) {
   const target = req.query.url;
-  if (!target) return res.status(400).send("Missing `url` query param.");
+  if (!target) {
+    return res.status(400).send("Missing `url` query param.");
+  }
 
   try {
     const response = await fetch(target, {
@@ -16,110 +18,122 @@ export default async function handler(req, res) {
       return res.status(500).send(`Failed to fetch ${target}: ${response.status}`);
     }
 
-    const contentType = response.headers.get('content-type') || '';
+    const rawContentType = response.headers.get('content-type') || 'application/octet-stream';
+    const contentType = rawContentType.split(';')[0].trim(); // sanitize
 
     if (contentType.includes('text/html')) {
       const html = await response.text();
       const $ = cheerio.load(html);
 
-      // Strip CSP, integrity attributes
+      // Clean up HTML (remove CSP, fix asset paths)
       $('meta[http-equiv="Content-Security-Policy"]').remove();
       $('script[integrity], link[integrity]').removeAttr('integrity');
 
-      // Rewrite src, srcset, href, inline styles, <style> urls
-      const rewriteUrl = urlStr => {
+      const rewrite = (url) => {
         try {
-          const abs = new URL(urlStr, target).toString();
-          return `/api/proxy?url=${encodeURIComponent(abs)}`;
+          const absolute = new URL(url, target).toString();
+          return `/api/proxy?url=${encodeURIComponent(absolute)}`;
         } catch {
-          return urlStr;
+          return url;
         }
       };
 
       $('[src]').each((_, el) => {
-        const v = $(el).attr('src');
-        if (v) $(el).attr('src', rewriteUrl(v));
-      });
-
-      $('[srcset]').each((_, el) => {
-        const ss = $(el).attr('srcset');
-        if (ss) {
-          const newss = ss.split(',').map(p => {
-            const [u, d] = p.trim().split(/\s+/);
-            return `${rewriteUrl(u)}${d ? ' ' + d : ''}`;
-          }).join(', ');
-          $(el).attr('srcset', newss);
-        }
+        const src = $(el).attr('src');
+        if (src) $(el).attr('src', rewrite(src));
       });
 
       $('[href]').each((_, el) => {
-        const v = $(el).attr('href');
-        if (v && !v.startsWith('javascript:') && !v.startsWith('mailto:') && !v.startsWith('#')) {
-          $(el).attr('href', rewriteUrl(v));
+        const href = $(el).attr('href');
+        if (
+          href &&
+          !href.startsWith('javascript:') &&
+          !href.startsWith('mailto:') &&
+          !href.startsWith('#')
+        ) {
+          $(el).attr('href', rewrite(href));
+        }
+      });
+
+      $('[srcset]').each((_, el) => {
+        const srcset = $(el).attr('srcset');
+        if (srcset) {
+          const updated = srcset.split(',').map(part => {
+            const [url, size] = part.trim().split(/\s+/);
+            return `${rewrite(url)}${size ? ' ' + size : ''}`;
+          }).join(', ');
+          $(el).attr('srcset', updated);
         }
       });
 
       $('[style]').each((_, el) => {
-        const s = $(el).attr('style');
-        if (s) {
-          const fixed = s.replace(/url\((['"]?)([^'")]+)\1\)/g, (m, q, u) => {
-            return `url(${q}${rewriteUrl(u)}${q})`;
+        const style = $(el).attr('style');
+        if (style) {
+          const updated = style.replace(/url\((['"]?)([^'")]+)\1\)/g, (_, q, u) => {
+            return `url(${q}${rewrite(u)}${q})`;
           });
-          $(el).attr('style', fixed);
+          $(el).attr('style', updated);
         }
       });
 
       $('style').each((_, el) => {
-        let css = $(el).html() || '';
-        css = css.replace(/url\((['"]?)([^'")]+)\1\)/g, (m, q, u) => {
-          return `url(${q}${rewriteUrl(u)}${q})`;
-        });
-        $(el).html(css);
+        const style = $(el).html();
+        if (style) {
+          const updated = style.replace(/url\((['"]?)([^'")]+)\1\)/g, (_, q, u) => {
+            return `url(${q}${rewrite(u)}${q})`;
+          });
+          $(el).html(updated);
+        }
       });
 
-      // Inject fetch/XHR override inside <head>
+      // Inject fetch override to make dynamic calls proxy-safe
       $('head').prepend(`
         <script>
-        (() => {
-          const base = '${target}';
-          function toProxy(url) {
-            try {
-              return '/api/proxy?url=' + encodeURIComponent(new URL(url, base).toString());
-            } catch {
-              return url;
+          (() => {
+            const base = '${target}';
+            function toProxy(url) {
+              try {
+                return '/api/proxy?url=' + encodeURIComponent(new URL(url, base).toString());
+              } catch { return url; }
             }
-          }
-          const _fetch = window.fetch;
-          window.fetch = function(r, init) {
-            if (typeof r === 'string') r = toProxy(r);
-            else if (r instanceof Request) r = new Request(toProxy(r.url), r);
-            return _fetch(r, init);
-          };
-          const o = XMLHttpRequest.prototype.open;
-          XMLHttpRequest.prototype.open = function(m, u, ...rest) {
-            return o.call(this, m, toProxy(u), ...rest);
-          };
-        })();
+
+            const _fetch = window.fetch;
+            window.fetch = function(input, init) {
+              if (typeof input === 'string') {
+                input = toProxy(input);
+              } else if (input instanceof Request) {
+                input = new Request(toProxy(input.url), input);
+              }
+              return _fetch(input, init);
+            };
+
+            const _open = XMLHttpRequest.prototype.open;
+            XMLHttpRequest.prototype.open = function(method, url, ...args) {
+              return _open.call(this, method, toProxy(url), ...args);
+            };
+          })();
         </script>
       `);
 
-      res.setHeader('Content-Type', 'text/html; charset=utf‑8');
-      res.setHeader('Cache‑Control', 'no‑cache');
-      res.setHeader('Access‑Control‑Allow‑Origin', '*');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Access-Control-Allow-Origin', '*');
       return res.status(200).send($.html());
     }
 
-    // Non‑HTML (images/css/js/json)
-    const buf = Buffer.from(await response.arrayBuffer());
+    // Non-HTML (image, JSON, CSS, JS, fonts, etc.)
+    const buffer = Buffer.from(await response.arrayBuffer());
+
     res.writeHead(200, {
-      'Content-Type': contentType,
-      'Cache‑Control': 'no‑cache',
-      'Access‑Control‑Allow‑Origin': '*',
+      'Content-Type': contentType || 'application/octet-stream',
+      'Cache-Control': 'no-cache',
+      'Access-Control-Allow-Origin': '*',
     });
-    return res.end(buf);
+
+    return res.end(buffer);
 
   } catch (err) {
-    console.error('Proxy error', err);
-    return res.status(500).send(`Proxy error: ${err.message}`);
+    console.error("Proxy error:", err);
+    return res.status(500).send("Proxy error: " + err.message);
   }
 }
