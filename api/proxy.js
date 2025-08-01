@@ -2,7 +2,9 @@ import * as cheerio from 'cheerio';
 
 export default async function handler(req, res) {
   const target = req.query.url;
-  if (!target) return res.status(400).send("Missing `url` query param.");
+  if (!target) {
+    return res.status(400).send("Missing `url` query param.");
+  }
 
   try {
     const response = await fetch(target, {
@@ -16,28 +18,20 @@ export default async function handler(req, res) {
       return res.status(500).send(`Failed to fetch ${target}: ${response.status}`);
     }
 
-    const contentTypeHeader = response.headers.get('content-type') || '';
-    const baseContentType = contentTypeHeader.split(';')[0].trim().toLowerCase();
+    const contentType = response.headers.get("content-type") || "";
+    const baseType = contentType.split(";")[0].trim();
 
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // ✅ Static assets (image, JS, CSS, icon, fonts, etc.)
-    if (!baseContentType.includes('text/html')) {
-      const safeContentType = /^[\x20-\x7E]+$/.test(baseContentType)
-        ? baseContentType
-        : 'application/octet-stream';
-
-      res.writeHead(200, {
-        'Content-Type': safeContentType,
-        'Cache-Control': 'no-cache',
-        'Access-Control-Allow-Origin': '*',
-      });
-      return res.end(buffer);
+    // ✅ Serve RAW for non-HTML content (like your image/banner/js/css loader)
+    if (!baseType.includes("text/html")) {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      res.setHeader("Content-Type", baseType || "application/octet-stream");
+      res.setHeader("Cache-Control", "no-cache");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      return res.status(200).send(buffer);
     }
 
-    // ✅ HTML rewriting
-    const html = buffer.toString('utf8');
+    // ✅ HTML: parse and rewrite URLs
+    const html = await response.text();
     const $ = cheerio.load(html);
 
     const rewriteUrl = (url) => {
@@ -49,11 +43,11 @@ export default async function handler(req, res) {
       }
     };
 
-    // Clean up security/meta
+    // Remove CSP + SRI
     $('meta[http-equiv="Content-Security-Policy"]').remove();
     $('script[integrity], link[integrity]').removeAttr('integrity');
 
-    // Rewrite all src/href/poster
+    // Rewrite src, href, poster
     $('[src], [href], [poster]').each((_, el) => {
       const $el = $(el);
       const attr = $el.attr('src') ? 'src' : $el.attr('href') ? 'href' : 'poster';
@@ -68,7 +62,7 @@ export default async function handler(req, res) {
       }
     });
 
-    // Rewrite inline style url(...)
+    // Rewrite inline styles with url(...)
     $('[style]').each((_, el) => {
       const style = $(el).attr('style');
       if (style) {
@@ -79,7 +73,7 @@ export default async function handler(req, res) {
       }
     });
 
-    // Rewrite CSS blocks <style>
+    // Rewrite <style> tags content
     $('style').each((_, el) => {
       const css = $(el).html();
       if (css) {
@@ -90,7 +84,7 @@ export default async function handler(req, res) {
       }
     });
 
-    // Inject override JS to patch fetch() and XMLHttpRequest
+    // Inject JS for overriding fetch and XHR
     $('head').prepend(`
       <script>
         (() => {
@@ -116,9 +110,9 @@ export default async function handler(req, res) {
       </script>
     `);
 
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Access-Control-Allow-Origin", "*");
     return res.status(200).send($.html());
 
   } catch (err) {
