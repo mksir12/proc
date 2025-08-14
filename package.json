@@ -4,6 +4,8 @@
   "main": "api/proxy.js",
   "type": "module",
   "dependencies": {
-    "cheerio": "^1.0.0-rc.12"
+    "cheerio": "^1.0.0-rc.12",
+    "chrome-aws-lambda": "^20.0.0",
+    "puppeteer-core": "^21.0.0"
   }
 }
