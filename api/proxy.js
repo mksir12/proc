@@ -88,7 +88,7 @@ export default async function handler(req, res) {
         }
       });
 
-      // Inject JavaScript override for fetch and XHR (only proxy same-origin requests)
+      // Inject JavaScript overrid for fetch and XHR (only proxy same-origin requests)
       $('head').prepend(`
         <script>
         (() => {
