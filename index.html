@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Video Tools</title>
+  <style>
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", Roboto, sans-serif; background: #f2f2f7; color: #111; }
+    header { text-align: center; padding: 20px; font-size: 20px; font-weight: 600; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 99; }
+    .container { padding: 20px; animation: fadeIn 0.3s ease; }
+    textarea { width: 100%; min-height: 200px; padding: 14px; border-radius: 12px; border: 1px solid #ccc; font-size: 14px; font-family: monospace; outline: none; resize: vertical; background: #fff; }
+    button { padding: 12px 18px; margin-top: 12px; border-radius: 10px; border: none; background: #007aff; color: #fff; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    button:hover { background: #005ecb; }
+    pre { background: #fff; border: 1px solid #ccc; border-radius: 12px; padding: 12px; margin-top: 15px; white-space: pre-wrap; font-family: monospace; font-size: 14px; }
+    .hidden { display: none; }
+    nav { display: flex; justify-content: space-around; align-items: center; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 6px 0; }
+    nav button { flex: 1; background: none; border: none; padding: 10px; font-size: 13px; color: #666; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+    nav button.active { color: #007aff; }
+    nav button i { font-size: 20px; margin-bottom: 4px; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+  </style>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+</head>
+<body>
+  <header>📱 Video Tools</header>
+
+  <!-- CHECK LINKS TAB -->
+  <div id="checkTab" class="container">
+    <h2>🔍 Check Video Links</h2>
+    <p>Paste your URLs (quotes, commas, newlines OK):</p>
+    <textarea id="checkInput"></textarea>
+    <div>
+      <label><input type="checkbox" id="asJson" /> Return JSON</label>
+    </div>
+    <button id="checkBtn">Check Links</button>
+    <pre id="checkOutput"></pre>
+  </div>
+
+  <!-- DUPLICATE CLEANER TAB -->
+  <div id="dupTab" class="container hidden">
+    <h2>♻️ Remove Duplicates</h2>
+    <p>Paste your URLs (quotes, commas, newlines OK):</p>
+    <textarea id="dupInput"></textarea>
+    <button id="dupBtn">Clean Duplicates</button>
+    <pre id="dupOutput"></pre>
+  </div>
+
+  <!-- iOS-style Bottom Nav -->
+  <nav>
+    <button id="navCheck" class="active"><i class="fa-solid fa-magnifying-glass"></i>Check</button>
+    <button id="navDup"><i class="fa-solid fa-clone"></i>Duplicate</button>
+  </nav>
+
+  <script>
+    // ===== Helper: parse pasted URLs =====
+    function parseUrls(raw) {
+      return raw.split(/[\n,]+/g)
+        .map(s => s.trim())
+        .map(s => s.replace(/^"+|"+$/g, ''))
+        .map(s => s.replace(/,+$/g, ''))
+        .filter(s => s && /^https?:\/\//.test(s));
+    }
+
+    // ===== Tab Switching =====
+    const checkTab = document.getElementById('checkTab');
+    const dupTab = document.getElementById('dupTab');
+    document.getElementById('navCheck').addEventListener('click', () => {
+      checkTab.classList.remove('hidden'); dupTab.classList.add('hidden');
+      document.getElementById('navCheck').classList.add('active');
+      document.getElementById('navDup').classList.remove('active');
+    });
+    document.getElementById('navDup').addEventListener('click', () => {
+      dupTab.classList.remove('hidden'); checkTab.classList.add('hidden');
+      document.getElementById('navDup').classList.add('active');
+      document.getElementById('navCheck').classList.remove('active');
+    });
+
+    // ===== Check Links =====
+    document.getElementById('checkBtn').addEventListener('click', () => {
+      const urls = parseUrls(document.getElementById('checkInput').value || "");
+      if (!urls.length) { alert("Paste at least one valid URL"); return; }
+      const asJson = document.getElementById('asJson').checked;
+      const urlParam = urls.map(encodeURIComponent).join(',');
+      let target = `/api/check?url=${urlParam}`;
+      if (asJson) target += "&format=json";
+      document.getElementById('checkOutput').textContent = "⏳ Checking... please wait...";
+      fetch(target).then(r => r.text()).then(t => {
+        document.getElementById('checkOutput').textContent = t;
+      }).catch(err => {
+        document.getElementById('checkOutput').textContent = "❌ Error: " + err;
+      });
+    });
+
+    // ===== Duplicate Cleaner =====
+    document.getElementById('dupBtn').addEventListener('click', () => {
+      let urls = parseUrls(document.getElementById('dupInput').value || "");
+      const total = urls.length;
+      const seen = new Set(), unique = [], duplicates = [];
+      for (const u of urls) {
+        if (seen.has(u)) { duplicates.push(u); }
+        else { seen.add(u); unique.push(u); }
+      }
+      const dupCount = duplicates.length;
+      let output = `📊 TOTAL: ${total}\n♻️ DUPLICATES: ${dupCount}\n✅ UNIQUE: ${unique.length}\n\n`;
+      if (unique.length > 0) {
+        output += "✅ CLEANED LINKS:\n" + unique.map(u => `"${u}",`).join("\n") + "\n";
+      }
+      if (dupCount > 0) {
+        output += `\n❌ DUPLICATE LINKS REMOVED:\n` + duplicates.map(u => `"${u}",`).join("\n") + "\n";
+      }
+      document.getElementById('dupOutput').textContent = output.trim();
+    });
+  </script>
+</body>
+</html>
