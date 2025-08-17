@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Video Link Checker</title>
+  <style>
+    body { font-family: system-ui, sans-serif; padding: 20px; background: #f9f9f9; }
+    h1 { margin-bottom: 10px; }
+    textarea { width: 100%; min-height: 200px; font-family: monospace; padding: 10px; }
+    button { padding: 10px 16px; margin-top: 10px; font-size: 15px; cursor: pointer; }
+    .row { margin-top: 10px; }
+    label { margin-right: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Video Link Checker</h1>
+  <p>Paste your URLs (quotes, commas, newlines OK):</p>
+
+  <textarea id="urls" placeholder='"https://jerryapi.vercel.app/naruto/1.mp4",
+"https://i.imgur.com/sIhrW6W.mp4",
+"https://jerryapi.vercel.app/naruto/2.mp4",
+"https://i.imgur.com/iEGMsr.mp4",
+"https://jerryapi.vercel.app/naruto/3.mp4",'></textarea>
+
+  <div class="row">
+    <label><input type="checkbox" id="asJson" /> Return JSON</label>
+  </div>
+
+  <button id="submit">Submit</button>
+
+  <script>
+    function parseUrls(raw) {
+      return raw.split(/[\n,]+/g)
+        .map(s => s.trim())
+        .map(s => s.replace(/^"+|"+$/g, '')) // remove wrapping quotes
+        .map(s => s.replace(/,+$/g, '')) // remove trailing commas
+        .filter(s => s && /^https?:\/\//.test(s));
+    }
+
+    document.getElementById('submit').addEventListener('click', () => {
+      let urls = parseUrls(document.getElementById('urls').value || "");
+      if (!urls.length) {
+        alert("Please paste at least one valid URL.");
+        return;
+      }
+      const asJson = document.getElementById('asJson').checked;
+      const urlParam = urls.map(encodeURIComponent).join(',');
+      let target = `/api/check?url=${urlParam}`;
+      if (asJson) target += "&format=json";
+      window.location.href = target; // redirect to API result
+    });
+  </script>
+</body>
+</html>
