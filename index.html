@@ -2,57 +2,56 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
   <title>Video Tools</title>
   <style>
-    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", Roboto, sans-serif; background: #f2f2f7; color: #111; }
-    header { text-align: center; padding: 20px; font-size: 20px; font-weight: 600; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 99; }
-    .container { padding: 20px; animation: fadeIn 0.3s ease; }
-    textarea { width: 100%; min-height: 200px; padding: 14px; border-radius: 12px; border: 1px solid #ccc; font-size: 14px; font-family: monospace; outline: none; resize: vertical; background: #fff; }
-    button { padding: 12px 18px; margin-top: 12px; border-radius: 10px; border: none; background: #007aff; color: #fff; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
-    button:hover { background: #005ecb; }
-    pre { background: #fff; border: 1px solid #ccc; border-radius: 12px; padding: 12px; margin-top: 15px; white-space: pre-wrap; font-family: monospace; font-size: 14px; }
-    .hidden { display: none; }
-    nav { display: flex; justify-content: space-around; align-items: center; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; padding: 6px 0; }
-    nav button { flex: 1; background: none; border: none; padding: 10px; font-size: 13px; color: #666; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+    body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", Roboto, sans-serif; background: #f9f9fb; color: #111; }
+    header { text-align: center; padding: 16px; font-size: 18px; font-weight: 600; background: #fff; border-bottom: 1px solid #ddd; position: sticky; top: 0; z-index: 99; }
+    .container { padding: 16px; }
+    textarea { width: 100%; min-height: 180px; padding: 12px; border-radius: 12px; border: 1px solid #ccc; font-size: 14px; font-family: monospace; outline: none; background: #fff; resize: vertical; }
+    button.action { width: 100%; padding: 14px; margin-top: 14px; border-radius: 12px; border: none; background: #007aff; color: #fff; font-size: 16px; font-weight: 500; cursor: pointer; transition: 0.2s; }
+    button.action:hover { background: #005ecb; }
+    nav { display: flex; justify-content: space-around; position: fixed; bottom: 0; left: 0; right: 0; background: #fff; border-top: 1px solid #ddd; }
+    nav button { flex: 1; background: none; border: none; padding: 8px; font-size: 12px; color: #666; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
     nav button.active { color: #007aff; }
-    nav button i { font-size: 20px; margin-bottom: 4px; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    nav button svg { width: 22px; height: 22px; margin-bottom: 4px; }
+    .hidden { display: none; }
   </style>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
 </head>
 <body>
-  <header>📱 Video Tools</header>
+  <header>Video Tools</header>
 
   <!-- CHECK LINKS TAB -->
   <div id="checkTab" class="container">
-    <h2>🔍 Check Video Links</h2>
-    <p>Paste your URLs (quotes, commas, newlines OK):</p>
-    <textarea id="checkInput"></textarea>
-    <div>
-      <label><input type="checkbox" id="asJson" /> Return JSON</label>
-    </div>
-    <button id="checkBtn">Check Links</button>
-    <pre id="checkOutput"></pre>
+    <h3>Check Video Links</h3>
+    <textarea id="checkInput" placeholder="Paste links here..."></textarea>
+    <div><label><input type="checkbox" id="asJson" /> Return JSON</label></div>
+    <button class="action" id="checkBtn">Check Links</button>
   </div>
 
   <!-- DUPLICATE CLEANER TAB -->
   <div id="dupTab" class="container hidden">
-    <h2>♻️ Remove Duplicates</h2>
-    <p>Paste your URLs (quotes, commas, newlines OK):</p>
-    <textarea id="dupInput"></textarea>
-    <button id="dupBtn">Clean Duplicates</button>
-    <pre id="dupOutput"></pre>
+    <h3>Remove Duplicates</h3>
+    <textarea id="dupInput" placeholder="Paste links here..."></textarea>
+    <button class="action" id="dupBtn">Clean Duplicates</button>
   </div>
 
-  <!-- iOS-style Bottom Nav -->
+  <!-- iOS Bottom Nav -->
   <nav>
-    <button id="navCheck" class="active"><i class="fa-solid fa-magnifying-glass"></i>Check</button>
-    <button id="navDup"><i class="fa-solid fa-clone"></i>Duplicate</button>
+    <button id="navCheck" class="active">
+      <!-- Magnifying Glass Icon -->
+      <svg fill="currentColor" viewBox="0 0 24 24"><path d="M10 2a8 8 0 105.29 14.29l4.71 4.7 1.42-1.41-4.7-4.71A8 8 0 0010 2zm0 2a6 6 0 110 12A6 6 0 0110 4z"/></svg>
+      Check
+    </button>
+    <button id="navDup">
+      <!-- Clone/Duplicate Icon -->
+      <svg fill="currentColor" viewBox="0 0 24 24"><path d="M7 7V3h14v14h-4v4H3V7h4zm2 2H5v12h12v-4h-8V9z"/></svg>
+      Duplicate
+    </button>
   </nav>
 
   <script>
-    // ===== Helper: parse pasted URLs =====
+    // Parse pasted links
     function parseUrls(raw) {
       return raw.split(/[\n,]+/g)
         .map(s => s.trim())
@@ -61,7 +60,7 @@
         .filter(s => s && /^https?:\/\//.test(s));
     }
 
-    // ===== Tab Switching =====
+    // Tab Switching
     const checkTab = document.getElementById('checkTab');
     const dupTab = document.getElementById('dupTab');
     document.getElementById('navCheck').addEventListener('click', () => {
@@ -75,7 +74,7 @@
       document.getElementById('navCheck').classList.remove('active');
     });
 
-    // ===== Check Links =====
+    // Check Links → open plain/text result
     document.getElementById('checkBtn').addEventListener('click', () => {
       const urls = parseUrls(document.getElementById('checkInput').value || "");
       if (!urls.length) { alert("Paste at least one valid URL"); return; }
@@ -83,32 +82,16 @@
       const urlParam = urls.map(encodeURIComponent).join(',');
       let target = `/api/check?url=${urlParam}`;
       if (asJson) target += "&format=json";
-      document.getElementById('checkOutput').textContent = "⏳ Checking... please wait...";
-      fetch(target).then(r => r.text()).then(t => {
-        document.getElementById('checkOutput').textContent = t;
-      }).catch(err => {
-        document.getElementById('checkOutput').textContent = "❌ Error: " + err;
-      });
+      window.open(target, "_blank");
     });
 
-    // ===== Duplicate Cleaner =====
+    // Duplicate Cleaner → open plain/text result
     document.getElementById('dupBtn').addEventListener('click', () => {
-      let urls = parseUrls(document.getElementById('dupInput').value || "");
-      const total = urls.length;
-      const seen = new Set(), unique = [], duplicates = [];
-      for (const u of urls) {
-        if (seen.has(u)) { duplicates.push(u); }
-        else { seen.add(u); unique.push(u); }
-      }
-      const dupCount = duplicates.length;
-      let output = `📊 TOTAL: ${total}\n♻️ DUPLICATES: ${dupCount}\n✅ UNIQUE: ${unique.length}\n\n`;
-      if (unique.length > 0) {
-        output += "✅ CLEANED LINKS:\n" + unique.map(u => `"${u}",`).join("\n") + "\n";
-      }
-      if (dupCount > 0) {
-        output += `\n❌ DUPLICATE LINKS REMOVED:\n` + duplicates.map(u => `"${u}",`).join("\n") + "\n";
-      }
-      document.getElementById('dupOutput').textContent = output.trim();
+      const urls = parseUrls(document.getElementById('dupInput').value || "");
+      if (!urls.length) { alert("Paste at least one valid URL"); return; }
+      const urlParam = urls.map(encodeURIComponent).join(',');
+      let target = `/api/duplicate?url=${urlParam}`;
+      window.open(target, "_blank");
     });
   </script>
 </body>
